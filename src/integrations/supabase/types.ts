@@ -100,13 +100,52 @@ export type Database = {
         }
         Relationships: []
       }
+      order_reviews: {
+        Row: {
+          created_at: string
+          delivery_comment: string | null
+          delivery_rating: number
+          food_comment: string | null
+          food_rating: number
+          id: string
+          order_id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          delivery_comment?: string | null
+          delivery_rating: number
+          food_comment?: string | null
+          food_rating: number
+          id?: string
+          order_id: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          delivery_comment?: string | null
+          delivery_rating?: number
+          food_comment?: string | null
+          food_rating?: number
+          id?: string
+          order_id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       orders: {
         Row: {
           created_at: string
           delivery_address: string
           delivery_date: string
+          delivery_lat: number | null
+          delivery_lng: number | null
           id: string
           items: Json
+          location_accuracy: number | null
           meal_type: Database["public"]["Enums"]["meal_type"]
           notes: string | null
           payment_method: string
@@ -121,8 +160,11 @@ export type Database = {
           created_at?: string
           delivery_address: string
           delivery_date: string
+          delivery_lat?: number | null
+          delivery_lng?: number | null
           id?: string
           items: Json
+          location_accuracy?: number | null
           meal_type: Database["public"]["Enums"]["meal_type"]
           notes?: string | null
           payment_method?: string
@@ -137,8 +179,11 @@ export type Database = {
           created_at?: string
           delivery_address?: string
           delivery_date?: string
+          delivery_lat?: number | null
+          delivery_lng?: number | null
           id?: string
           items?: Json
+          location_accuracy?: number | null
           meal_type?: Database["public"]["Enums"]["meal_type"]
           notes?: string | null
           payment_method?: string
