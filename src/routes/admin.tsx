@@ -254,7 +254,7 @@ function OrdersTab() {
             {o.items.map((it, i) => <li key={i}>• {it.name} × {it.qty}</li>)}
           </ul>
           <div className="mt-3 flex flex-wrap gap-1.5">
-            {["confirmed", "preparing", "out_for_delivery", "delivered", "cancelled"].map((s) => (
+            {(["confirmed", "preparing", "out_for_delivery", "delivered", "cancelled"] as const).map((s) => (
               <button key={s} onClick={() => setStatus(o.id, s)} className={`rounded-full px-2.5 py-1 text-[10px] font-semibold uppercase ${o.status === s ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"}`}>
                 {s.replace(/_/g, " ")}
               </button>
