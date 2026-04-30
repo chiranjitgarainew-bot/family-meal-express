@@ -228,7 +228,8 @@ function OrdersTab() {
     },
   });
 
-  const setStatus = async (id: string, status: string) => {
+  type OrderStatus = "pending" | "confirmed" | "preparing" | "out_for_delivery" | "delivered" | "cancelled";
+  const setStatus = async (id: string, status: OrderStatus) => {
     const { error } = await supabase.from("orders").update({ status }).eq("id", id);
     if (error) toast.error(error.message);
     else { toast.success("Status updated"); qc.invalidateQueries({ queryKey: ["admin-orders"] }); }
