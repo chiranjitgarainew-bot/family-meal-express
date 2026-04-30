@@ -15,6 +15,7 @@ interface CartCtx {
   remove: (id: string) => void;
   setQty: (id: string, qty: number) => void;
   clear: () => void;
+  replaceAll: (next: CartItem[]) => void;
   total: number;
   count: number;
   mealType: MealType | null;
