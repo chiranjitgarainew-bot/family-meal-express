@@ -39,12 +39,13 @@ export function CartProvider({ children }: { children: ReactNode }) {
   const setQty = (id: string, qty: number) =>
     setItems((c) => (qty <= 0 ? c.filter((i) => i.id !== id) : c.map((i) => (i.id === id ? { ...i, qty } : i))));
   const clear = () => setItems([]);
+  const replaceAll = (next: CartItem[]) => setItems(next);
 
   const total = items.reduce((s, i) => s + i.price * i.qty, 0);
   const count = items.reduce((s, i) => s + i.qty, 0);
   const mealType = items[0]?.meal_type ?? null;
 
-  return <Ctx.Provider value={{ items, add, remove, setQty, clear, total, count, mealType }}>{children}</Ctx.Provider>;
+  return <Ctx.Provider value={{ items, add, remove, setQty, clear, replaceAll, total, count, mealType }}>{children}</Ctx.Provider>;
 }
 
 export function useCart() {
