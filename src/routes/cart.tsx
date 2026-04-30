@@ -1,6 +1,6 @@
 import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { Minus, Plus, Trash2, MapPin, Phone, CreditCard, Loader2, ShoppingBag, CheckCircle2 } from "lucide-react";
+import { Minus, Plus, Trash2, MapPin, Phone, CreditCard, Loader2, ShoppingBag, CheckCircle2, Navigation, Wallet } from "lucide-react";
 import { z } from "zod";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
@@ -14,6 +14,7 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   type MealType, DEFAULT_CUTOFFS, isPastCutoff, formatCutoffMessage, inr, formatDate, nextNDates, todayISO,
 } from "@/lib/cutoff";
+import { getCurrentPosition, staticMapUrl, osmLink, type GeoPoint } from "@/lib/location";
 
 export const Route = createFileRoute("/cart")({
   head: () => ({ meta: [{ title: "Your cart — Family Food Service" }] }),
@@ -26,7 +27,15 @@ const checkoutSchema = z.object({
   notes: z.string().max(300).optional(),
 });
 
-type PaymentMethod = "upi" | "card" | "netbanking" | "wallet";
+type PaymentMethod = "cod" | "upi" | "card" | "netbanking" | "wallet";
+
+const PAYMENT_OPTIONS: { id: PaymentMethod; label: string; sub: string; available: boolean }[] = [
+  { id: "cod", label: "Cash on Delivery", sub: "Pay when food arrives", available: true },
+  { id: "upi", label: "UPI", sub: "Coming soon", available: false },
+  { id: "card", label: "Debit / Credit Card", sub: "Coming soon", available: false },
+  { id: "netbanking", label: "Net Banking", sub: "Coming soon", available: false },
+  { id: "wallet", label: "Wallet", sub: "Coming soon", available: false },
+];
 
 function CartPage() {
   const { user, loading } = useAuth();
@@ -37,7 +46,9 @@ function CartPage() {
   const [phone, setPhone] = useState("");
   const [address, setAddress] = useState("");
   const [notes, setNotes] = useState("");
-  const [pay, setPay] = useState<PaymentMethod>("upi");
+  const [pay, setPay] = useState<PaymentMethod>("cod");
+  const [loc, setLoc] = useState<GeoPoint | null>(null);
+  const [locBusy, setLocBusy] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [success, setSuccess] = useState(false);
 
@@ -45,7 +56,6 @@ function CartPage() {
     if (!loading && !user) nav({ to: "/login", replace: true });
   }, [loading, user, nav]);
 
-  // Load profile defaults
   useEffect(() => {
     if (!user) return;
     supabase.from("profiles").select("phone, address").eq("id", user.id).maybeSingle().then(({ data }) => {
@@ -58,11 +68,25 @@ function CartPage() {
   const closed = isPastCutoff(date, meal, DEFAULT_CUTOFFS);
   const dates = nextNDates(7);
 
+  const captureLocation = async () => {
+    setLocBusy(true);
+    try {
+      const p = await getCurrentPosition();
+      setLoc(p);
+      toast.success("Live location captured");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Could not get location");
+    } finally {
+      setLocBusy(false);
+    }
+  };
+
   const placeOrder = async () => {
     const parsed = checkoutSchema.safeParse({ phone, address, notes });
     if (!parsed.success) { toast.error(parsed.error.issues[0].message); return; }
     if (!items.length || !mealType) { toast.error("Cart is empty"); return; }
     if (closed) { toast.error("This meal slot has closed for the selected date"); return; }
+    if (pay !== "cod") { toast.error("Selected payment method is coming soon. Please use Cash on Delivery."); return; }
 
     setSubmitting(true);
     try {
@@ -73,14 +97,16 @@ function CartPage() {
         items: items.map(i => ({ id: i.id, name: i.name, price: i.price, qty: i.qty })),
         total_amount: total,
         status: "confirmed",
-        payment_method: pay,
-        payment_status: "paid", // mock checkout
+        payment_method: "cod",
+        payment_status: "pending", // COD: paid on delivery
         delivery_address: parsed.data.address,
         phone: parsed.data.phone,
         notes: parsed.data.notes || null,
+        delivery_lat: loc?.lat ?? null,
+        delivery_lng: loc?.lng ?? null,
+        location_accuracy: loc?.accuracy ?? null,
       });
       if (error) throw error;
-      // Save defaults back to profile
       await supabase.from("profiles").update({ phone: parsed.data.phone, address: parsed.data.address }).eq("id", user!.id);
       setSuccess(true);
       clear();
@@ -102,7 +128,7 @@ function CartPage() {
           </div>
           <h1 className="mt-6 font-display text-3xl">Order placed!</h1>
           <p className="mt-2 text-sm text-muted-foreground">
-            Your {meal} for {formatDate(date)} is confirmed. We'll deliver hot and fresh.
+            Your {meal} for {formatDate(date)} is confirmed. Pay {inr(total)} cash on delivery.
           </p>
           <div className="mt-8 flex w-full gap-3">
             <Button variant="outline" className="flex-1 h-12 rounded-xl" onClick={() => { setSuccess(false); nav({ to: "/orders" }); }}>
@@ -133,7 +159,6 @@ function CartPage() {
         </div>
       ) : (
         <div className="flex-1 px-5 pb-6">
-          {/* Items */}
           <ul className="space-y-3">
             {items.map((i) => (
               <li key={i.id} className="flex items-center gap-3 rounded-2xl bg-card p-3 shadow-soft">
@@ -188,6 +213,36 @@ function CartPage() {
               <Label htmlFor="address" className="flex items-center gap-1.5"><MapPin className="h-3.5 w-3.5" /> Delivery address</Label>
               <Textarea id="address" placeholder="House no, street, area, landmark, city" value={address} onChange={(e) => setAddress(e.target.value)} className="rounded-xl" rows={3} />
             </div>
+
+            {/* Live location */}
+            <div className="rounded-2xl bg-card p-3 shadow-soft">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Navigation className="h-4 w-4 text-primary" />
+                  <span className="text-sm font-semibold">Live location</span>
+                </div>
+                <Button type="button" variant={loc ? "outline" : "default"} size="sm" onClick={captureLocation} disabled={locBusy} className="rounded-full">
+                  {locBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : loc ? "Update" : "Share"}
+                </Button>
+              </div>
+              {loc ? (
+                <div className="mt-2">
+                  <img
+                    src={staticMapUrl(loc, 600, 240)}
+                    alt="Map preview of your delivery point"
+                    className="w-full rounded-xl border border-border"
+                    onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+                  />
+                  <div className="mt-2 flex items-center justify-between text-[11px] text-muted-foreground">
+                    <span>{loc.lat.toFixed(5)}, {loc.lng.toFixed(5)} · ±{Math.round(loc.accuracy)}m</span>
+                    <a href={osmLink(loc)} target="_blank" rel="noreferrer" className="text-primary">Open map ↗</a>
+                  </div>
+                </div>
+              ) : (
+                <p className="mt-1 text-[11px] text-muted-foreground">Share your GPS location so we deliver to the exact spot.</p>
+              )}
+            </div>
+
             <div className="space-y-1.5">
               <Label htmlFor="notes">Notes (optional)</Label>
               <Input id="notes" placeholder="Less spicy, extra roti..." value={notes} onChange={(e) => setNotes(e.target.value)} className="h-12 rounded-xl" />
@@ -197,24 +252,48 @@ function CartPage() {
           {/* Payment method */}
           <div className="mt-6">
             <Label className="flex items-center gap-1.5 mb-2"><CreditCard className="h-3.5 w-3.5" /> Payment method</Label>
-            <div className="grid grid-cols-2 gap-2">
-              {(["upi", "card", "netbanking", "wallet"] as const).map((m) => (
-                <button key={m} onClick={() => setPay(m)} className={`rounded-xl border px-3 py-3 text-sm font-medium transition ${pay === m ? "border-primary bg-primary/10 text-primary" : "border-border bg-card"}`}>
-                  {m === "upi" ? "UPI" : m === "card" ? "Card" : m === "netbanking" ? "Net Banking" : "Wallet"}
-                </button>
-              ))}
+            <div className="space-y-2">
+              {PAYMENT_OPTIONS.map((m) => {
+                const active = pay === m.id;
+                return (
+                  <button
+                    key={m.id}
+                    onClick={() => m.available && setPay(m.id)}
+                    disabled={!m.available}
+                    className={`flex w-full items-center gap-3 rounded-xl border px-3 py-3 text-left transition ${
+                      active ? "border-primary bg-primary/10" : "border-border bg-card"
+                    } ${m.available ? "" : "opacity-60 cursor-not-allowed"}`}
+                  >
+                    <div className={`grid h-9 w-9 place-items-center rounded-lg ${active ? "bg-primary text-primary-foreground" : "bg-muted"}`}>
+                      {m.id === "cod" ? <Wallet className="h-4 w-4" /> : <CreditCard className="h-4 w-4" />}
+                    </div>
+                    <div className="flex-1">
+                      <p className="text-sm font-semibold">{m.label}</p>
+                      <p className="text-[11px] text-muted-foreground">{m.sub}</p>
+                    </div>
+                    {!m.available && (
+                      <span className="rounded-full bg-warning/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-warning-foreground">
+                        Soon
+                      </span>
+                    )}
+                    {active && (
+                      <span className="rounded-full bg-primary px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-primary-foreground">
+                        Selected
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
             </div>
-            <p className="mt-2 text-[10px] text-muted-foreground">Mock checkout — no real payment is processed.</p>
           </div>
 
-          {/* Total + place */}
           <div className="mt-6 rounded-2xl bg-card p-4 shadow-soft">
             <div className="flex items-center justify-between">
-              <span className="text-sm text-muted-foreground">Total</span>
+              <span className="text-sm text-muted-foreground">Total (pay on delivery)</span>
               <span className="font-display text-2xl text-primary">{inr(total)}</span>
             </div>
             <Button onClick={placeOrder} disabled={submitting || closed} className="mt-3 h-12 w-full rounded-xl text-base font-semibold shadow-soft">
-              {submitting ? <Loader2 className="h-5 w-5 animate-spin" /> : `Pay ${inr(total)} & place order`}
+              {submitting ? <Loader2 className="h-5 w-5 animate-spin" /> : `Place order · ${inr(total)} COD`}
             </Button>
           </div>
         </div>
