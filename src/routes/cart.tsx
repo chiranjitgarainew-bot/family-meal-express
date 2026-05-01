@@ -1,7 +1,7 @@
 import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { Minus, Plus, Trash2, MapPin, Phone, CreditCard, Loader2, ShoppingBag, CheckCircle2, Navigation, Wallet } from "lucide-react";
-import { z } from "zod";
+import { useQuery } from "@tanstack/react-query";
+import { Minus, Plus, Trash2, MapPin, CreditCard, Loader2, ShoppingBag, CheckCircle2, Wallet, ChevronRight } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth-context";
@@ -10,22 +10,19 @@ import { BottomNav } from "@/components/BottomNav";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import {
   type MealType, DEFAULT_CUTOFFS, isPastCutoff, formatCutoffMessage, inr, formatDate, nextNDates, todayISO,
 } from "@/lib/cutoff";
-import { getCurrentPosition, staticMapUrl, osmLink, type GeoPoint } from "@/lib/location";
 
 export const Route = createFileRoute("/cart")({
   head: () => ({ meta: [{ title: "Your cart — Family Food Service" }] }),
   component: CartPage,
 });
 
-const checkoutSchema = z.object({
-  phone: z.string().trim().regex(/^[6-9]\d{9}$/, "Enter a valid 10-digit Indian mobile"),
-  address: z.string().trim().min(10, "Address must be at least 10 characters").max(500),
-  notes: z.string().max(300).optional(),
-});
+interface AddressRow {
+  id: string; label: string; full_address: string; phone: string;
+  lat: number | null; lng: number | null; location_accuracy: number | null; is_default: boolean;
+}
 
 type PaymentMethod = "cod" | "upi" | "card" | "netbanking" | "wallet";
 
@@ -43,50 +40,44 @@ function CartPage() {
   const { items, setQty, remove, total, clear, mealType } = useCart();
 
   const [date, setDate] = useState<string>(todayISO());
-  const [phone, setPhone] = useState("");
-  const [address, setAddress] = useState("");
   const [notes, setNotes] = useState("");
   const [pay, setPay] = useState<PaymentMethod>("cod");
-  const [loc, setLoc] = useState<GeoPoint | null>(null);
-  const [locBusy, setLocBusy] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [success, setSuccess] = useState(false);
+  const [selectedAddrId, setSelectedAddrId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!loading && !user) nav({ to: "/login", replace: true });
   }, [loading, user, nav]);
 
+  const { data: addresses } = useQuery({
+    queryKey: ["addresses", user?.id],
+    queryFn: async () => {
+      const { data, error } = await supabase.from("user_addresses").select("*").eq("user_id", user!.id)
+        .order("is_default", { ascending: false }).order("created_at");
+      if (error) throw error;
+      return data as AddressRow[];
+    },
+    enabled: !!user,
+  });
+
+  // pick default address by default
   useEffect(() => {
-    if (!user) return;
-    supabase.from("profiles").select("phone, address").eq("id", user.id).maybeSingle().then(({ data }) => {
-      if (data?.phone) setPhone(data.phone);
-      if (data?.address) setAddress(data.address);
-    });
-  }, [user]);
+    if (!addresses || selectedAddrId) return;
+    const def = addresses.find((a) => a.is_default) ?? addresses[0];
+    if (def) setSelectedAddrId(def.id);
+  }, [addresses, selectedAddrId]);
 
   const meal: MealType = mealType ?? "lunch";
   const closed = isPastCutoff(date, meal, DEFAULT_CUTOFFS);
   const dates = nextNDates(7);
-
-  const captureLocation = async () => {
-    setLocBusy(true);
-    try {
-      const p = await getCurrentPosition();
-      setLoc(p);
-      toast.success("Live location captured");
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Could not get location");
-    } finally {
-      setLocBusy(false);
-    }
-  };
+  const selectedAddr = addresses?.find((a) => a.id === selectedAddrId) ?? null;
 
   const placeOrder = async () => {
-    const parsed = checkoutSchema.safeParse({ phone, address, notes });
-    if (!parsed.success) { toast.error(parsed.error.issues[0].message); return; }
     if (!items.length || !mealType) { toast.error("Cart is empty"); return; }
     if (closed) { toast.error("This meal slot has closed for the selected date"); return; }
     if (pay !== "cod") { toast.error("Selected payment method is coming soon. Please use Cash on Delivery."); return; }
+    if (!selectedAddr) { toast.error("Please add and select a delivery address"); return; }
 
     setSubmitting(true);
     try {
@@ -94,20 +85,20 @@ function CartPage() {
         user_id: user!.id,
         delivery_date: date,
         meal_type: mealType,
-        items: items.map(i => ({ id: i.id, name: i.name, price: i.price, qty: i.qty })),
+        items: items.map((i) => ({ id: i.id, name: i.name, price: i.price, qty: i.qty })),
         total_amount: total,
-        status: "confirmed",
+        status: "pending", // admin must confirm
         payment_method: "cod",
-        payment_status: "pending", // COD: paid on delivery
-        delivery_address: parsed.data.address,
-        phone: parsed.data.phone,
-        notes: parsed.data.notes || null,
-        delivery_lat: loc?.lat ?? null,
-        delivery_lng: loc?.lng ?? null,
-        location_accuracy: loc?.accuracy ?? null,
+        payment_status: "pending",
+        delivery_address: `${selectedAddr.label}: ${selectedAddr.full_address}`,
+        phone: selectedAddr.phone,
+        notes: notes.slice(0, 300) || null,
+        delivery_lat: selectedAddr.lat,
+        delivery_lng: selectedAddr.lng,
+        location_accuracy: selectedAddr.location_accuracy,
+        address_id: selectedAddr.id,
       });
       if (error) throw error;
-      await supabase.from("profiles").update({ phone: parsed.data.phone, address: parsed.data.address }).eq("id", user!.id);
       setSuccess(true);
       clear();
     } catch (err: unknown) {
@@ -128,7 +119,7 @@ function CartPage() {
           </div>
           <h1 className="mt-6 font-display text-3xl">Order placed!</h1>
           <p className="mt-2 text-sm text-muted-foreground">
-            Your {meal} for {formatDate(date)} is confirmed. Pay {inr(total)} cash on delivery.
+            Your {meal} for {formatDate(date)} is awaiting admin confirmation. You'll see status updates in My orders.
           </p>
           <div className="mt-8 flex w-full gap-3">
             <Button variant="outline" className="flex-1 h-12 rounded-xl" onClick={() => { setSuccess(false); nav({ to: "/orders" }); }}>
@@ -203,50 +194,50 @@ function CartPage() {
             </p>
           </div>
 
-          {/* Address */}
-          <div className="mt-6 space-y-3">
-            <div className="space-y-1.5">
-              <Label htmlFor="phone" className="flex items-center gap-1.5"><Phone className="h-3.5 w-3.5" /> Phone</Label>
-              <Input id="phone" inputMode="numeric" maxLength={10} placeholder="98xxxxxxxx" value={phone} onChange={(e) => setPhone(e.target.value.replace(/\D/g, ""))} className="h-12 rounded-xl" />
+          {/* Saved address selector */}
+          <div className="mt-6">
+            <div className="mb-2 flex items-center justify-between">
+              <Label className="flex items-center gap-1.5"><MapPin className="h-3.5 w-3.5" /> Delivery address</Label>
+              <Link to="/addresses" className="text-xs text-primary flex items-center gap-0.5">
+                Manage <ChevronRight className="h-3 w-3" />
+              </Link>
             </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="address" className="flex items-center gap-1.5"><MapPin className="h-3.5 w-3.5" /> Delivery address</Label>
-              <Textarea id="address" placeholder="House no, street, area, landmark, city" value={address} onChange={(e) => setAddress(e.target.value)} className="rounded-xl" rows={3} />
-            </div>
-
-            {/* Live location */}
-            <div className="rounded-2xl bg-card p-3 shadow-soft">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Navigation className="h-4 w-4 text-primary" />
-                  <span className="text-sm font-semibold">Live location</span>
-                </div>
-                <Button type="button" variant={loc ? "outline" : "default"} size="sm" onClick={captureLocation} disabled={locBusy} className="rounded-full">
-                  {locBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : loc ? "Update" : "Share"}
-                </Button>
+            {!addresses?.length ? (
+              <Link
+                to="/addresses"
+                className="block rounded-2xl border border-dashed border-border p-4 text-center text-sm text-muted-foreground"
+              >
+                + Add your first delivery address
+              </Link>
+            ) : (
+              <div className="space-y-2">
+                {addresses.map((a) => {
+                  const active = selectedAddrId === a.id;
+                  return (
+                    <button
+                      key={a.id}
+                      onClick={() => setSelectedAddrId(a.id)}
+                      className={`w-full rounded-2xl border p-3 text-left transition ${
+                        active ? "border-primary bg-primary/5" : "border-border bg-card"
+                      }`}
+                    >
+                      <div className="flex items-center gap-2">
+                        <span className="font-semibold text-sm">{a.label}</span>
+                        {a.is_default && <span className="rounded-full bg-success/15 px-1.5 py-0.5 text-[9px] font-semibold uppercase text-success">Default</span>}
+                        {active && <span className="ml-auto rounded-full bg-primary px-2 py-0.5 text-[10px] font-semibold text-primary-foreground">Selected</span>}
+                      </div>
+                      <p className="mt-0.5 text-xs text-muted-foreground line-clamp-2">{a.full_address}</p>
+                      <p className="text-[11px] text-muted-foreground">📞 {a.phone}</p>
+                    </button>
+                  );
+                })}
               </div>
-              {loc ? (
-                <div className="mt-2">
-                  <img
-                    src={staticMapUrl(loc, 600, 240)}
-                    alt="Map preview of your delivery point"
-                    className="w-full rounded-xl border border-border"
-                    onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
-                  />
-                  <div className="mt-2 flex items-center justify-between text-[11px] text-muted-foreground">
-                    <span>{loc.lat.toFixed(5)}, {loc.lng.toFixed(5)} · ±{Math.round(loc.accuracy)}m</span>
-                    <a href={osmLink(loc)} target="_blank" rel="noreferrer" className="text-primary">Open map ↗</a>
-                  </div>
-                </div>
-              ) : (
-                <p className="mt-1 text-[11px] text-muted-foreground">Share your GPS location so we deliver to the exact spot.</p>
-              )}
-            </div>
+            )}
+          </div>
 
-            <div className="space-y-1.5">
-              <Label htmlFor="notes">Notes (optional)</Label>
-              <Input id="notes" placeholder="Less spicy, extra roti..." value={notes} onChange={(e) => setNotes(e.target.value)} className="h-12 rounded-xl" />
-            </div>
+          <div className="mt-4 space-y-1.5">
+            <Label htmlFor="notes">Notes (optional)</Label>
+            <Input id="notes" placeholder="Less spicy, extra roti..." value={notes} onChange={(e) => setNotes(e.target.value)} className="h-12 rounded-xl" />
           </div>
 
           {/* Payment method */}
@@ -257,9 +248,7 @@ function CartPage() {
                 const active = pay === m.id;
                 return (
                   <button
-                    key={m.id}
-                    onClick={() => m.available && setPay(m.id)}
-                    disabled={!m.available}
+                    key={m.id} onClick={() => m.available && setPay(m.id)} disabled={!m.available}
                     className={`flex w-full items-center gap-3 rounded-xl border px-3 py-3 text-left transition ${
                       active ? "border-primary bg-primary/10" : "border-border bg-card"
                     } ${m.available ? "" : "opacity-60 cursor-not-allowed"}`}
@@ -271,16 +260,7 @@ function CartPage() {
                       <p className="text-sm font-semibold">{m.label}</p>
                       <p className="text-[11px] text-muted-foreground">{m.sub}</p>
                     </div>
-                    {!m.available && (
-                      <span className="rounded-full bg-warning/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-warning-foreground">
-                        Soon
-                      </span>
-                    )}
-                    {active && (
-                      <span className="rounded-full bg-primary px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-primary-foreground">
-                        Selected
-                      </span>
-                    )}
+                    {!m.available && <span className="rounded-full bg-warning/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-warning-foreground">Soon</span>}
                   </button>
                 );
               })}
@@ -295,6 +275,7 @@ function CartPage() {
             <Button onClick={placeOrder} disabled={submitting || closed} className="mt-3 h-12 w-full rounded-xl text-base font-semibold shadow-soft">
               {submitting ? <Loader2 className="h-5 w-5 animate-spin" /> : `Place order · ${inr(total)} COD`}
             </Button>
+            <p className="mt-2 text-center text-[11px] text-muted-foreground">Order will be confirmed by admin shortly</p>
           </div>
         </div>
       )}
