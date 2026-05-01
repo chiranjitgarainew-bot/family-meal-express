@@ -30,6 +30,12 @@ export function isPastCutoff(
   return now >= cutoff;
 }
 
+/** True if user can still edit/cancel an order (before its cut-off). */
+export function canEditOrder(deliveryDate: string, meal: MealType, status: string, cutoffs = DEFAULT_CUTOFFS) {
+  if (!["pending", "confirmed"].includes(status)) return false;
+  return !isPastCutoff(deliveryDate, meal, cutoffs);
+}
+
 export function formatCutoffMessage(meal: MealType, cutoffs = DEFAULT_CUTOFFS): string {
   const t = cutoffs[meal];
   const [h, m] = t.split(":").map(Number);
