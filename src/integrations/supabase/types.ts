@@ -64,6 +64,36 @@ export type Database = {
           },
         ]
       }
+      delivery_boys: {
+        Row: {
+          created_at: string
+          full_name: string
+          id: string
+          is_active: boolean
+          phone: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          full_name: string
+          id?: string
+          is_active?: boolean
+          phone: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          full_name?: string
+          id?: string
+          is_active?: boolean
+          phone?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       food_items: {
         Row: {
           created_at: string
@@ -138,16 +168,24 @@ export type Database = {
       }
       orders: {
         Row: {
+          address_id: string | null
+          admin_note: string | null
+          cancel_reason: string | null
+          cancelled_at: string | null
           created_at: string
           delivery_address: string
+          delivery_boy_id: string | null
+          delivery_charge: number
           delivery_date: string
           delivery_lat: number | null
           delivery_lng: number | null
+          delivery_otp: string | null
           id: string
           items: Json
           location_accuracy: number | null
           meal_type: Database["public"]["Enums"]["meal_type"]
           notes: string | null
+          otp_verified_at: string | null
           payment_method: string
           payment_status: string
           phone: string
@@ -157,16 +195,24 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          address_id?: string | null
+          admin_note?: string | null
+          cancel_reason?: string | null
+          cancelled_at?: string | null
           created_at?: string
           delivery_address: string
+          delivery_boy_id?: string | null
+          delivery_charge?: number
           delivery_date: string
           delivery_lat?: number | null
           delivery_lng?: number | null
+          delivery_otp?: string | null
           id?: string
           items: Json
           location_accuracy?: number | null
           meal_type: Database["public"]["Enums"]["meal_type"]
           notes?: string | null
+          otp_verified_at?: string | null
           payment_method?: string
           payment_status?: string
           phone: string
@@ -176,16 +222,24 @@ export type Database = {
           user_id: string
         }
         Update: {
+          address_id?: string | null
+          admin_note?: string | null
+          cancel_reason?: string | null
+          cancelled_at?: string | null
           created_at?: string
           delivery_address?: string
+          delivery_boy_id?: string | null
+          delivery_charge?: number
           delivery_date?: string
           delivery_lat?: number | null
           delivery_lng?: number | null
+          delivery_otp?: string | null
           id?: string
           items?: Json
           location_accuracy?: number | null
           meal_type?: Database["public"]["Enums"]["meal_type"]
           notes?: string | null
+          otp_verified_at?: string | null
           payment_method?: string
           payment_status?: string
           phone?: string
@@ -194,7 +248,22 @@ export type Database = {
           updated_at?: string
           user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "orders_address_id_fkey"
+            columns: ["address_id"]
+            isOneToOne: false
+            referencedRelation: "user_addresses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "orders_delivery_boy_id_fkey"
+            columns: ["delivery_boy_id"]
+            isOneToOne: false
+            referencedRelation: "delivery_boys"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       profiles: {
         Row: {
@@ -204,6 +273,7 @@ export type Database = {
           full_name: string | null
           id: string
           phone: string | null
+          priority: Database["public"]["Enums"]["priority_tag"]
           updated_at: string
         }
         Insert: {
@@ -213,6 +283,7 @@ export type Database = {
           full_name?: string | null
           id: string
           phone?: string | null
+          priority?: Database["public"]["Enums"]["priority_tag"]
           updated_at?: string
         }
         Update: {
@@ -222,7 +293,71 @@ export type Database = {
           full_name?: string | null
           id?: string
           phone?: string | null
+          priority?: Database["public"]["Enums"]["priority_tag"]
           updated_at?: string
+        }
+        Relationships: []
+      }
+      user_addresses: {
+        Row: {
+          created_at: string
+          full_address: string
+          id: string
+          is_default: boolean
+          label: string
+          lat: number | null
+          lng: number | null
+          location_accuracy: number | null
+          phone: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          full_address: string
+          id?: string
+          is_default?: boolean
+          label?: string
+          lat?: number | null
+          lng?: number | null
+          location_accuracy?: number | null
+          phone: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          full_address?: string
+          id?: string
+          is_default?: boolean
+          label?: string
+          lat?: number | null
+          lng?: number | null
+          location_accuracy?: number | null
+          phone?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      user_roles: {
+        Row: {
+          created_at: string
+          id: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          user_id?: string
         }
         Relationships: []
       }
@@ -231,9 +366,17 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      has_role: {
+        Args: {
+          _role: Database["public"]["Enums"]["app_role"]
+          _user_id: string
+        }
+        Returns: boolean
+      }
       is_admin: { Args: never; Returns: boolean }
     }
     Enums: {
+      app_role: "admin" | "delivery_boy" | "customer"
       meal_type: "lunch" | "dinner"
       order_status:
         | "pending"
@@ -242,6 +385,7 @@ export type Database = {
         | "out_for_delivery"
         | "delivered"
         | "cancelled"
+      priority_tag: "regular" | "vip" | "subscriber"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -369,6 +513,7 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
+      app_role: ["admin", "delivery_boy", "customer"],
       meal_type: ["lunch", "dinner"],
       order_status: [
         "pending",
@@ -378,6 +523,7 @@ export const Constants = {
         "delivered",
         "cancelled",
       ],
+      priority_tag: ["regular", "vip", "subscriber"],
     },
   },
 } as const
