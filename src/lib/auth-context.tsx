@@ -9,6 +9,7 @@ interface AuthCtx {
   session: Session | null;
   loading: boolean;
   isAdmin: boolean;
+  isDeliveryBoy: boolean;
   signOut: () => Promise<void>;
 }
 
@@ -18,6 +19,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
+  const [isDeliveryBoy, setIsDeliveryBoy] = useState(false);
 
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_e, s) => {
@@ -33,10 +35,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => subscription.unsubscribe();
   }, []);
 
+  // detect delivery boy by checking if a delivery_boys row exists for this user
+  useEffect(() => {
+    if (!user) { setIsDeliveryBoy(false); return; }
+    supabase.from("delivery_boys").select("id").eq("user_id", user.id).eq("is_active", true).maybeSingle()
+      .then(({ data }) => setIsDeliveryBoy(!!data));
+  }, [user]);
+
   const isAdmin = !!user?.email && ADMIN_EMAILS.includes(user.email);
 
   return (
-    <Ctx.Provider value={{ user, session, loading, isAdmin, signOut: async () => { await supabase.auth.signOut(); } }}>
+    <Ctx.Provider value={{ user, session, loading, isAdmin, isDeliveryBoy, signOut: async () => { await supabase.auth.signOut(); } }}>
       {children}
     </Ctx.Provider>
   );
