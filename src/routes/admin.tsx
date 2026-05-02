@@ -135,7 +135,7 @@ function DashboardTab() {
       ]);
       if (ordersRes.error) throw ordersRes.error;
       if (profilesRes.error) throw profilesRes.error;
-      const orders = ordersRes.data as AdminOrder[];
+      const orders = ordersRes.data as unknown as AdminOrder[];
       const profiles = profilesRes.data as { id: string; priority: string }[];
 
       const todayOrders = orders.filter((o) => o.delivery_date === today);
@@ -231,7 +231,7 @@ function OrdersTab() {
   }, [orders, filter]);
 
   const update = async (id: string, patch: Partial<AdminOrder>) => {
-    const { error } = await supabase.from("orders").update(patch).eq("id", id);
+    const { error } = await supabase.from("orders").update(patch as never).eq("id", id);
     if (error) toast.error(error.message);
     else { toast.success("Updated"); qc.invalidateQueries({ queryKey: ["admin-orders"] }); }
   };
