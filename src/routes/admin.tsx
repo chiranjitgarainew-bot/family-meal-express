@@ -135,7 +135,7 @@ function DashboardTab() {
       ]);
       if (ordersRes.error) throw ordersRes.error;
       if (profilesRes.error) throw profilesRes.error;
-      const orders = ordersRes.data as AdminOrder[];
+      const orders = ordersRes.data as unknown as AdminOrder[];
       const profiles = profilesRes.data as { id: string; priority: string }[];
 
       const todayOrders = orders.filter((o) => o.delivery_date === today);
