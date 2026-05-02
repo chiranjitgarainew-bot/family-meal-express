@@ -197,17 +197,27 @@ function CartPage() {
           {/* Saved address selector */}
           <div className="mt-6">
             <div className="mb-2 flex items-center justify-between">
-              <Label className="flex items-center gap-1.5"><MapPin className="h-3.5 w-3.5" /> Delivery address</Label>
+              <Label className="flex items-center gap-1.5">
+                <MapPin className="h-3.5 w-3.5" /> Delivery address
+                <span className="text-destructive">*</span>
+              </Label>
               <Link to="/addresses" className="text-xs text-primary flex items-center gap-0.5">
-                Manage <ChevronRight className="h-3 w-3" />
+                {addresses?.length ? "Manage" : "Add"} <ChevronRight className="h-3 w-3" />
               </Link>
             </div>
             {!addresses?.length ? (
               <Link
                 to="/addresses"
-                className="block rounded-2xl border border-dashed border-border p-4 text-center text-sm text-muted-foreground"
+                className="flex items-center gap-3 rounded-2xl border-2 border-dashed border-primary/40 bg-primary/5 p-4 text-left"
               >
-                + Add your first delivery address
+                <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-primary text-primary-foreground">
+                  <MapPin className="h-5 w-5" />
+                </div>
+                <div className="flex-1">
+                  <p className="text-sm font-semibold text-foreground">Set your delivery address</p>
+                  <p className="text-xs text-muted-foreground">Required to place order — tap to add</p>
+                </div>
+                <ChevronRight className="h-4 w-4 text-primary" />
               </Link>
             ) : (
               <div className="space-y-2">
@@ -272,8 +282,8 @@ function CartPage() {
               <span className="text-sm text-muted-foreground">Total (pay on delivery)</span>
               <span className="font-display text-2xl text-primary">{inr(total)}</span>
             </div>
-            <Button onClick={placeOrder} disabled={submitting || closed} className="mt-3 h-12 w-full rounded-xl text-base font-semibold shadow-soft">
-              {submitting ? <Loader2 className="h-5 w-5 animate-spin" /> : `Place order · ${inr(total)} COD`}
+            <Button onClick={placeOrder} disabled={submitting || closed || !selectedAddr} className="mt-3 h-12 w-full rounded-xl text-base font-semibold shadow-soft">
+              {submitting ? <Loader2 className="h-5 w-5 animate-spin" /> : !selectedAddr ? "Set delivery address to continue" : `Place order · ${inr(total)} COD`}
             </Button>
             <p className="mt-2 text-center text-[11px] text-muted-foreground">Order will be confirmed by admin shortly</p>
           </div>
