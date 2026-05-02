@@ -231,7 +231,7 @@ function OrdersTab() {
   }, [orders, filter]);
 
   const update = async (id: string, patch: Partial<AdminOrder>) => {
-    const { error } = await supabase.from("orders").update(patch).eq("id", id);
+    const { error } = await supabase.from("orders").update(patch as never).eq("id", id);
     if (error) toast.error(error.message);
     else { toast.success("Updated"); qc.invalidateQueries({ queryKey: ["admin-orders"] }); }
   };
