@@ -282,8 +282,8 @@ function CartPage() {
               <span className="text-sm text-muted-foreground">Total (pay on delivery)</span>
               <span className="font-display text-2xl text-primary">{inr(total)}</span>
             </div>
-            <Button onClick={placeOrder} disabled={submitting || closed} className="mt-3 h-12 w-full rounded-xl text-base font-semibold shadow-soft">
-              {submitting ? <Loader2 className="h-5 w-5 animate-spin" /> : `Place order · ${inr(total)} COD`}
+            <Button onClick={placeOrder} disabled={submitting || closed || !selectedAddr} className="mt-3 h-12 w-full rounded-xl text-base font-semibold shadow-soft">
+              {submitting ? <Loader2 className="h-5 w-5 animate-spin" /> : !selectedAddr ? "Set delivery address to continue" : `Place order · ${inr(total)} COD`}
             </Button>
             <p className="mt-2 text-center text-[11px] text-muted-foreground">Order will be confirmed by admin shortly</p>
           </div>
