@@ -19,9 +19,13 @@ export const Route = createFileRoute("/addresses")({
 });
 
 const addrSchema = z.object({
-  label: z.string().trim().min(1).max(40),
+  label: z.string().trim().min(1, "Pick a label").max(40),
   full_address: z.string().trim().min(10, "Address must be at least 10 characters").max(500),
-  phone: z.string().trim().regex(/^[6-9]\d{9}$/, "Enter a valid 10-digit Indian mobile"),
+  phone: z
+    .string()
+    .trim()
+    .transform((v) => v.replace(/\D/g, ""))
+    .pipe(z.string().min(10, "Enter a 10-digit mobile number").max(15)),
 });
 
 interface AddressRow {
